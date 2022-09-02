@@ -20,6 +20,7 @@ mongoClient.connect().then(() => {
   db = mongoClient.db("bate-papo-uol");
 });
 
+// #Rota participants 
 server.get("/participants", async (request, response) => {
   try {
     const participantsResponse = await db
@@ -33,7 +34,6 @@ server.get("/participants", async (request, response) => {
       }))
     );
   } catch (error) {
-    console.log(error);
     response.sendStatus(500);
   }
 });
@@ -41,22 +41,31 @@ server.get("/participants", async (request, response) => {
 server.post("/participants", async (request, response) => {
   const { name } = request.body;
 
-  const validation = userSchema.validate({ name }, { abortEarly: false });
+  const validation = userSchema.validate({ name });
+  //retorna uma array vazia se o nome ainda não existir ou uma array contendo name
+  const filterName = await db
+    .collection("participants")
+    .find({ name })
+    .toArray(); 
 
+  //valida se o nome é uma string e se não é vazio
   if (validation.error) {
-    response.sendStatus(422);
+    response.send("Preencha o campo corretamente").status(422);
+    return;
+  }
+  //Verifica se o nome passado já existe no db
+  //Se o tamanho da array for mair que 0 significa que o nome já existe 
+  if (filterName.length > 0) {  
+    response.send("Usuário já existente").status(409);
     return;
   }
 
-  //Verificar se o nome já foi usado
-  //const repeatedName = db.collection("participants").findOne(name);
   try {
     const participantsResponse = await db
       .collection("participants")
       .insertOne({ name });
     response.sendStatus(201);
   } catch (error) {
-    console.log(error);
     response.sendStatus(500);
   }
 });
