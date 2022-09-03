@@ -142,6 +142,29 @@ server.get("/messages", async (request, response) => {
   }
 });
 
+//# Rota status
+server.post("/status", async (request, response) => {
+const { user } = request.headers;
+
+try {
+  const statusResponse = await db.collection("participants").findOne({ user })
+  if(!statusResponse){
+   response.sendStatus(404);
+   return
+  }
+ await db.colletcion("participantes").updateOne({ user } , {$set: {
+  lastStatus:Date.now()
+}})
+response.sendStatus(200);
+
+} catch (error) {
+  response.sendStatus(500);
+}
+
+});
+
+
+
 server.listen(5000, function () {
   console.log("Listening on Port 5000");
 });
