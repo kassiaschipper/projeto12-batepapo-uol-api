@@ -10,6 +10,12 @@ const userSchema = joi.object({
   name: joi.string().required().min(1),
 });
 
+const messageSchema = joi.object({
+  to: joi.string().required().min(1),
+  text: joi.string().required().min(1),
+  type: joi.required().valid("message", "private_message"),
+});
+
 const server = express();
 server.use(cors());
 server.use(express.json());
@@ -20,7 +26,6 @@ let db;
 mongoClient.connect().then(() => {
   db = mongoClient.db("bate-papo-uol");
 });
-
 
 // #Rota participants
 server.get("/participants", async (request, response) => {
@@ -66,7 +71,7 @@ server.post("/participants", async (request, response) => {
     const participantsResponse = await db
       .collection("participants")
       .insertOne({ name, lastStatus: Date.now() });
-    const message = await db.collection("messages").insertOne({
+    const message = await db.collection("message").insertOne({
       from: name,
       to: "Todos",
       text: "entra na sala...",
@@ -74,10 +79,66 @@ server.post("/participants", async (request, response) => {
       time: dayjs().locale("pt-br").format("HH:mm:ss"),
     });
     response.sendStatus(201);
-    
   } catch (error) {
-    console.log(error)
+    //console.log(error);
     response.sendStatus(500);
+  }
+});
+
+// #Rota messages
+
+server.post("/messages", async (request, response) => {
+  const { to, text, type } = request.body;
+
+  const user = request.headers.user;
+
+  const validation = messageSchema.validate({ to, text, type });
+  const userFromValidation = await db
+    .collection("participants")
+    .findOne({ name: user })
+    .toArray();
+
+  //verifica se o usuario de from existe
+  //se a array retorna vazia significa que o usuario não está no db
+  if (userFromValidation.length === 0) {
+    response.sendStatus(422);
+    return;
+  }
+  if (validation.error) {
+    response.sendStatus(422);
+    return;
+  }
+
+  try {
+    const messagesResponse = await db.collection("messages").insertOne({
+      from: user,
+      to,
+      text,
+      type,
+      time: dayjs().locale("pt-br").format("HH:mm:ss"),
+    });
+    response.sendStatus(201);
+  } catch (error) {
+    response.sendStatus(422);
+  }
+});
+
+server.get("/messages", async (request, response) => {
+  const { limit } = request.query;
+  const { user } = request.headers;
+
+  try {
+    const messagesResponse = await db.collection("messages").find().toArray();
+    const filterMessages = messagesResponse.filter(value => value.from === user || value.to === "Todos" || value.to === user);
+
+    if (!limit) {
+      response.send(filterMessages)      
+    }
+        
+    response.send(filterMessages.slice(limit * -1))//extrai os últimos elementos do array considerando o limite 
+
+  } catch (error) {
+    response.sendStatus(400);
   }
 });
 
