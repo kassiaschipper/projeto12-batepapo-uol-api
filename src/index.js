@@ -6,16 +6,6 @@ import dayjs from "dayjs";
 import dotenv from "dotenv";
 dotenv.config();
 
-const userSchema = joi.object({
-  name: joi.string().required().min(1),
-});
-
-const messageSchema = joi.object({
-  to: joi.string().required().min(1),
-  text: joi.string().required().min(1),
-  type: joi.required().valid("message", "private_message"),
-});
-
 const server = express();
 server.use(cors());
 server.use(express.json());
@@ -26,6 +16,33 @@ let db;
 mongoClient.connect().then(() => {
   db = mongoClient.db("bate-papo-uol");
 });
+
+const userSchema = joi.object({
+  name: joi.string().required().min(1),
+});
+
+const messageSchema = joi.object({
+  to: joi.string().required().min(1),
+  text: joi.string().required().min(1),
+  type: joi.required().valid("message", "private_message"),
+});
+
+setInterval( async () => {
+  const participantsList = await db.collection("participantes").find().toArray()
+  let timeLimit = Date.now()-10000;
+  participantsList.map( value => {
+    if(value.lastStatus < timeLimit){ 
+      db.collection("participants").deleteOne(value);
+      db.collection("message").insertOne({
+        from: value.name,
+        to: 'Todos',
+        text: 'sai da sala...',
+        type: 'message',
+        time: dayjs().format('HH:mm:ss')
+      });
+    }
+  })  
+}, 15000);
 
 // #Rota participants
 server.get("/participants", async (request, response) => {
@@ -162,8 +179,6 @@ response.sendStatus(200);
 }
 
 });
-
-
 
 server.listen(5000, function () {
   console.log("Listening on Port 5000");
