@@ -53,12 +53,12 @@ server.get("/participants", async (request, response) => {
       .collection("participants")
       .find()
       .toArray();
-    response.send(
-      participantsResponse.map((value) => ({
-        ...value,
-        _id: undefined,
-      }))
-    );
+    response.send(participantsResponse)
+    //   participantsResponse.map((value) => ({
+    //     ...value,
+    //     _id: undefined,
+    //   }))
+    // );
   } catch (error) {
     response.sendStatus(500);
   }
@@ -165,13 +165,13 @@ server.get("/messages", async (request, response) => {
 
 //# Rota status
 server.post("/status", async (request, response) => {
-  const { user } = request.headers;
+  const user = request.headers.user;
 
   try {
     const statusResponse = await db
       .collection("participants")
       .findOne({ name: user });
-    console.log(`statusResponse ${statusResponse}`);
+    //console.log(`statusResponse ${statusResponse}`);
     if (!statusResponse) {
       response.sendStatus(404);
       return;
@@ -188,6 +188,27 @@ server.post("/status", async (request, response) => {
     response.sendStatus(200);
   } catch (error) {
     response.sendStatus(500);
+  }
+});
+
+server.delete("/messages/:messageId", async (request, response) => {
+  const { messageId } = request.params;
+  const  user  = request.headers.user;
+
+  try {
+      const deleteMessage = await db.collection("messages").findOne({ _id: new ObjectId(messageId)});
+      if(!deleteMessage){
+           response.sendStatus(404);
+           return
+      }
+      if(deleteMessage.from !== user){
+          response.sendStatus(401);
+          return 
+      }
+      await db.collection("messages").deleteOne({ _id: new ObjectId(messageId)});
+      response.sendStatus(200);
+  } catch (error) {
+     response.sendStatus(500);
   }
 });
 
