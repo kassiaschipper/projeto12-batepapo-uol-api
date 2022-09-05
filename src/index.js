@@ -1,8 +1,9 @@
-import express from "express";
+import express, { response } from "express";
 import cors from "cors";
 import { MongoClient } from "mongodb";
 import joi from "joi";
 import dayjs from "dayjs";
+import { stripHtml } from "string-strip-html";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -27,23 +28,24 @@ const messageSchema = joi.object({
   type: joi.required().valid("message", "private_message"),
 });
 
-setInterval( async () => {
-  const participantsList = await db.collection("participantes").find().toArray()
-  let timeLimit = Date.now()-10000;
-  participantsList.map( value => {
-    if(value.lastStatus < timeLimit){ 
-      db.collection("participants").deleteOne(value);
-      db.collection("message").insertOne({
+setInterval(async () => {
+  const participantsList = await db.collection("participants").find().toArray();
+  console.log(participantsList)
+
+  participantsList.forEach( async (value) => {  
+    if (Date.now() - 10000 > Number(value.lastStatus)){
+      await db.collection("participants").deleteOne(value);
+      await db.collection("messages").insertOne({
         from: value.name,
-        to: 'Todos',
-        text: 'sai da sala...',
-        type: 'message',
-        time: dayjs().format('HH:mm:ss')
+        to: "Todos",
+        text: "sai da sala...",
+        type: "status",
+        time: dayjs().format("HH:mm:ss"),
       });
     }
-  })  
+  });
 }, 15000);
-
+//
 // #Rota participants
 server.get("/participants", async (request, response) => {
   try {
@@ -88,13 +90,15 @@ server.post("/participants", async (request, response) => {
     const participantsResponse = await db
       .collection("participants")
       .insertOne({ name, lastStatus: Date.now() });
-    const message = await db.collection("message").insertOne({
+
+    const message = await db.collection("messages").insertOne({
       from: name,
       to: "Todos",
       text: "entra na sala...",
       type: "status",
       time: dayjs().locale("pt-br").format("HH:mm:ss"),
     });
+    console.log(message);
     response.sendStatus(201);
   } catch (error) {
     //console.log(error);
@@ -103,21 +107,19 @@ server.post("/participants", async (request, response) => {
 });
 
 // #Rota messages
-
 server.post("/messages", async (request, response) => {
   const { to, text, type } = request.body;
-
-  const user = request.headers.user;
+  const { user } = request.headers;
 
   const validation = messageSchema.validate({ to, text, type });
+
   const userFromValidation = await db
     .collection("participants")
-    .findOne({ name: user })
-    .toArray();
+    .findOne({ name: user });
 
+  //console.log(userFromValidation)
   //verifica se o usuario de from existe
-  //se a array retorna vazia significa que o usuario não está no db
-  if (userFromValidation.length === 0) {
+  if (userFromValidation === null) {
     response.sendStatus(422);
     return;
   }
@@ -146,14 +148,16 @@ server.get("/messages", async (request, response) => {
 
   try {
     const messagesResponse = await db.collection("messages").find().toArray();
-    const filterMessages = messagesResponse.filter(value => value.from === user || value.to === "Todos" || value.to === user);
+    const filterMessages = messagesResponse.filter(
+      (value) =>
+        value.from === user || value.to === "Todos" || value.to === user
+    );
 
     if (!limit) {
-      response.send(filterMessages)      
+      response.send(filterMessages);
     }
-        
-    response.send(filterMessages.slice(limit * -1))//extrai os últimos elementos do array considerando o limite 
 
+    response.send(filterMessages.slice(limit * -1)); //extrai os últimos elementos do array considerando o limite
   } catch (error) {
     response.sendStatus(400);
   }
@@ -161,23 +165,30 @@ server.get("/messages", async (request, response) => {
 
 //# Rota status
 server.post("/status", async (request, response) => {
-const { user } = request.headers;
+  const { user } = request.headers;
 
-try {
-  const statusResponse = await db.collection("participants").findOne({ user })
-  if(!statusResponse){
-   response.sendStatus(404);
-   return
+  try {
+    const statusResponse = await db
+      .collection("participants")
+      .findOne({ name: user });
+    console.log(`statusResponse ${statusResponse}`);
+    if (!statusResponse) {
+      response.sendStatus(404);
+      return;
+    }
+    const upadated = await db.collection("participants").updateOne(
+      { name: user },
+      {
+        $set: {
+          lastStatus: Date.now(),
+        },
+      }
+    );
+    console.log(`updated ${upadated}`);
+    response.sendStatus(200);
+  } catch (error) {
+    response.sendStatus(500);
   }
- await db.colletcion("participantes").updateOne({ user } , {$set: {
-  lastStatus:Date.now()
-}})
-response.sendStatus(200);
-
-} catch (error) {
-  response.sendStatus(500);
-}
-
 });
 
 server.listen(5000, function () {
